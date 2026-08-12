@@ -1,0 +1,222 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHONUTF8: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  build-windows:
+    name: Test and build TelegramOpsStudio.exe
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Detect project directory and configure runner
+        shell: pwsh
+        run: |
+          $candidates = @(".", "TelegramOpsStudio")
+          $projectDir = $null
+          foreach ($candidate in $candidates) {
+            if ((Test-Path (Join-Path $candidate "main.py")) -and
+                (Test-Path (Join-Path $candidate "requirements.txt")) -and
+                (Test-Path (Join-Path $candidate "requirements-dev.txt"))) {
+              $projectDir = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+          if (-not $projectDir) {
+            throw "Could not locate project root. Expected main.py, requirements.txt and requirements-dev.txt either at repository root or TelegramOpsStudio/."
+          }
+
+          $dataDir = Join-Path $env:RUNNER_TEMP "TelegramOpsStudioTestData"
+          New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+          "PROJECT_DIR=$projectDir" >> $env:GITHUB_ENV
+          "TELEGRAM_OPS_DATA_DIR=$dataDir" >> $env:GITHUB_ENV
+          Write-Host "PROJECT_DIR=$projectDir"
+          Write-Host "TELEGRAM_OPS_DATA_DIR=$dataDir"
+
+      - name: Validate repository layout
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          $required = @(
+            "main.py",
+            "requirements.txt",
+            "requirements-dev.txt",
+            "pyproject.toml",
+            "app/db.py",
+            "app/ui.py",
+            "scripts/preflight.py",
+            "scripts/check_version.py",
+            "tests/test_project_layout.py"
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Required file is missing: $file" }
+          }
+          $workflowAtProject = Join-Path $env:PROJECT_DIR ".github/workflows/windows-build.yml"
+          $workflowAtRepo = Join-Path $env:GITHUB_WORKSPACE ".github/workflows/windows-build.yml"
+          if (-not (Test-Path $workflowAtProject) -and -not (Test-Path $workflowAtRepo)) {
+            throw "Required workflow file is missing: .github/workflows/windows-build.yml"
+          }
+          Get-ChildItem -Force
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          architecture: "x64"
+
+      - name: Project preflight and version consistency
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python scripts/preflight.py
+          python scripts/check_version.py
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+          python -m pip check
+
+      - name: Compile-check source
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python -m compileall -q main.py app scripts tests
+
+      - name: Import smoke test
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python -c "import PySide6, telethon, keyring, openpyxl, socks; from app import db, telegram_service, ui; print('IMPORT_SMOKE_OK')"
+
+      - name: Run tests
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python -m pytest -q
+
+      - name: Source runtime self-tests
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          Set-Location $env:PROJECT_DIR
+          python main.py --self-test
+          python main.py --ui-self-test
+
+      - name: Build Windows executable with Nuitka
+        shell: pwsh
+        run: |
+          Set-Location $env:PROJECT_DIR
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          python -m nuitka `
+            --mode=onefile `
+            --enable-plugin=pyside6 `
+            --windows-console-mode=disable `
+            --msvc=latest `
+            --output-dir=dist `
+            --output-filename=TelegramOpsStudio.exe `
+            --include-package=keyring.backends `
+            --include-package=win32ctypes `
+            --product-name="Telegram Ops Studio" `
+            --file-description="Telegram Ops Studio" `
+            --file-version=1.0.1.0 `
+            --product-version=1.0.1.0 `
+            --report=dist/nuitka-report.xml `
+            --assume-yes-for-downloads `
+            main.py
+
+      - name: Run built executable self-tests
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          Set-Location $env:PROJECT_DIR
+          if (-not (Test-Path "dist/TelegramOpsStudio.exe")) {
+            throw "Build failed: dist/TelegramOpsStudio.exe was not created."
+          }
+          & "dist/TelegramOpsStudio.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Built executable runtime self-test failed with exit code $LASTEXITCODE" }
+          & "dist/TelegramOpsStudio.exe" --ui-self-test
+          if ($LASTEXITCODE -ne 0) { throw "Built executable UI self-test failed with exit code $LASTEXITCODE" }
+
+      - name: Stage release files and checksum
+        shell: pwsh
+        run: |
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "_artifact"
+          New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
+          Copy-Item (Join-Path $env:PROJECT_DIR "dist/TelegramOpsStudio.exe") $artifactDir -Force
+          $report = Join-Path $env:PROJECT_DIR "dist/nuitka-report.xml"
+          if (Test-Path $report) { Copy-Item $report $artifactDir -Force }
+          $exe = Join-Path $artifactDir "TelegramOpsStudio.exe"
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  TelegramOpsStudio.exe" | Set-Content -Encoding ascii (Join-Path $artifactDir "SHA256SUMS.txt")
+          Get-Item $exe | Format-List Name,Length,LastWriteTime
+          Get-Content (Join-Path $artifactDir "SHA256SUMS.txt")
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: TelegramOpsStudio-Windows-${{ github.sha }}
+          path: |
+            _artifact/TelegramOpsStudio.exe
+            _artifact/SHA256SUMS.txt
+            _artifact/nuitka-report.xml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload diagnostics if build failed
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: TelegramOpsStudio-build-diagnostics-${{ github.sha }}
+          path: |
+            **/dist/nuitka-report.xml
+            **/nuitka-crash-report.xml
+            **/*.nuitka-crash-report.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Publish GitHub Release for version tag
+        if: startsWith(github.ref, 'refs/tags/v') && success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE "_artifact"
+          $exe = Join-Path $artifactDir "TelegramOpsStudio.exe"
+          $checksum = Join-Path $artifactDir "SHA256SUMS.txt"
+          $manifestPath = Join-Path $artifactDir "update-manifest.json"
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/$tag/TelegramOpsStudio.exe"
+          $manifest = [ordered]@{ version=$version; url=$downloadUrl; sha256=$sha } | ConvertTo-Json
+          $manifest | Set-Content -Encoding utf8 $manifestPath
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $exe $checksum $manifestPath --clobber
+          } else {
+            gh release create $tag $exe $checksum $manifestPath --title "Telegram Ops Studio $tag" --generate-notes
+          }
