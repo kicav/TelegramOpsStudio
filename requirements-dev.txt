@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=9,<10
+Nuitka[onefile]>=4.1,<5
