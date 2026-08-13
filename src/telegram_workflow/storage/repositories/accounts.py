@@ -54,7 +54,8 @@ class AccountRepository:
 
     def ready_ids(self) -> list[int]:
         rows = self.connection.execute(
-            "SELECT id FROM accounts WHERE state = ? ORDER BY id", (AccountState.READY.value,)
+            "SELECT id FROM accounts WHERE state = ? ORDER BY id",
+            (AccountState.READY.value,),
         ).fetchall()
         return [int(row["id"]) for row in rows]
 
@@ -63,3 +64,24 @@ class AccountRepository:
             "SELECT COUNT(*) FROM accounts WHERE state = ?", (state.value,)
         ).fetchone()
         return int(row[0]) if row else 0
+
+    def list_all(self) -> list[sqlite3.Row]:
+        return self.connection.execute(
+            """
+            SELECT a.*, p.name AS api_profile_name, p.api_id, p.api_hash_secret_ref
+            FROM accounts a
+            LEFT JOIN api_profiles p ON p.id = a.api_profile_id
+            ORDER BY a.id
+            """
+        ).fetchall()
+
+    def get_with_profile(self, account_id: int) -> sqlite3.Row | None:
+        return self.connection.execute(
+            """
+            SELECT a.*, p.name AS api_profile_name, p.api_id, p.api_hash_secret_ref
+            FROM accounts a
+            LEFT JOIN api_profiles p ON p.id = a.api_profile_id
+            WHERE a.id = ?
+            """,
+            (account_id,),
+        ).fetchone()

@@ -1,42 +1,56 @@
 # TelegramOpsStudio
 
-Local-first Windows desktop workflow engine for permission-aware Telegram operations, source-member analytics, target validation, persistent jobs, recovery, audit, and export.
+Local-first Windows desktop application for permission-aware Telegram account/session management, accessible member scanning, filtering, target snapshots, candidate review, persistent review jobs, audit logs and CSV/XLSX export.
 
 ## Current release line
 
-`0.2.0.dev0` is the architecture-complete baseline. The data layer, persistent queue, state machines, scanner, filtering, target snapshots, candidate builder, retry/recovery engine, exports, diagnostics, fake end-to-end workflow, PySide6 shell, and GitHub build/release pipelines are implemented.
+`0.3.0.dev0` is the first functional desktop milestone. The UI is no longer a placeholder shell: Accounts, Workflow, Jobs, Logs and Settings are connected to `CoreRuntime` through commands/events.
 
-The production Telethon adapter is intentionally **read-only**: session health, entity resolution, accessible participant scans, and target permission validation. Side effects are isolated behind `AuthorizedActionAdapter`; CI uses `FakeTelegramAdapter`. There is no participant-list bypass, message-sender fallback, FloodWait evasion, or hidden account rotation.
+The production Telethon boundary remains intentionally **read/validation-first**. It can authenticate sessions, resolve entities, enumerate participant lists Telegram exposes to the authenticated account, inspect target permissions and capture accessible target snapshots. Live bulk membership execution is not enabled. There is no participant-list bypass, message-sender fallback, FloodWait evasion, proxy/account rotation, or hidden-member circumvention.
+
+## Functional workflow
+
+```text
+Accounts
+  API ID + API Hash + phone
+        ↓
+  Telegram OTP / optional 2FA
+        ↓
+  OS credential store + local .session
+        ↓
+Workflow
+  source link → accessible member scan → SQLite
+        ↓
+  filters
+        ↓
+  target link → permission validation → target snapshot
+        ↓
+  remove target overlap / previous success
+        ↓
+  candidate preview
+        ↓
+  CSV/XLSX export or persistent review job
+```
+
+API Hash values are stored through the operating-system keyring. OTP and 2FA values are never written to SQLite by the authentication service. SQLite remains the canonical data store; spreadsheet files are exports only.
 
 ## Architecture
 
 ```text
-Qt UI thread
-    │ commands/events only
+PySide6 UI thread
+    │ immutable commands/events
     ▼
 CoreRuntime QThread
-    │ asyncio loop
-    ├── SQLite / migrations / repositories
-    ├── account/session services
+    │ asyncio loop; owns SQLite + Telegram clients
+    ├── keyring secret store
+    ├── account/session auth
     ├── source scanner
     ├── filter + candidate builder
-    ├── target validator + versioned snapshots
-    ├── persistent job queue + attempts
-    ├── retry + recovery
-    └── TelegramAdapter boundary
+    ├── target validator + snapshots
+    ├── persistent review jobs
+    ├── audit log
+    └── CSV/XLSX exporter
 ```
-
-SQLite is the source of truth. CSV/XLSX are export formats only. Telethon `.session` files are stored separately under the local application-data directory.
-
-## Safe end-to-end validation
-
-The core engine can be tested without Qt or Telegram credentials:
-
-```powershell
-python -m telegram_workflow --demo-workflow
-```
-
-Expected result: a fake source scan, filter/target subtraction, persistent job, success/skip results, and a `COMPLETED` job.
 
 ## Local development
 
@@ -50,24 +64,31 @@ python -m telegram_workflow --self-check
 python -m telegram_workflow
 ```
 
+A safe fake engine test is also available:
+
+```powershell
+python -m telegram_workflow --demo-workflow
+```
+
 ## Windows build
 
 ```powershell
 ./scripts/build.ps1
 ```
 
-The stable bundle is written to:
+Output:
 
 ```text
 release/TelegramOpsStudio/
+└── TelegramOpsStudio.exe + required DLL/PYD/package files
 ```
 
-The build script runs `--version` and `--self-check` against the compiled executable and removes PDB files from the release bundle.
+The whole standalone directory must be distributed together; `TelegramOpsStudio.exe` is not a single-file build.
 
 ## GitHub Actions
 
-- `CI`: compile, Ruff, pytest, self-check on Python 3.12.
-- `Build Windows`: clean Windows build with `pyside6-deploy`/Nuitka standalone and artifact upload.
-- `Release Windows`: portable ZIP, Inno Setup installer, SHA-256 file, GitHub Release.
+- `CI`: compile, Ruff, pytest and self-check on Python 3.12.
+- `Build Windows`: PySide6/Nuitka standalone build and artifact upload.
+- `Release Windows`: portable ZIP, Inno Setup installer and SHA-256 release assets.
 
-See `ARCHITECTURE.md`, `SECURITY.md`, and `DEPLOYMENT.md` for the frozen design and release procedure.
+See `ARCHITECTURE.md`, `SECURITY.md`, and `DEPLOYMENT.md` for the design and release procedure.

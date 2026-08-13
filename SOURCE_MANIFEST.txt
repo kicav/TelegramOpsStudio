@@ -1,6 +1,6 @@
-.github/workflows/build-windows.yml
-.github/workflows/ci.yml
-.github/workflows/release-windows.yml
+.github/workflows/build-windows.yaml
+.github/workflows/ci.yaml
+.github/workflows/release-windows.yaml
 .gitignore
 ARCHITECTURE.md
 ARCHITECTURE_REVIEW.md
@@ -10,6 +10,7 @@ LICENSE
 PROJECT_STATUS.md
 README.md
 SECURITY.md
+SOURCE_MANIFEST.txt
 VALIDATION_REPORT.json
 app.py
 packaging/README.md
@@ -99,6 +100,7 @@ tests/integration/test_member_repository.py
 tests/integration/test_same_entity_block.py
 tests/integration/test_settings_audit.py
 tests/integration/test_source_scanner.py
+tests/integration/test_v03_functional_data.py
 tests/migrations/__init__.py
 tests/migrations/test_atomic_migration.py
 tests/migrations/test_initial_schema.py

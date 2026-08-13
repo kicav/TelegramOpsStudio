@@ -1,0 +1,15 @@
+TelegramOpsStudio 0.3.0.dev0 patch
+
+Apply these files over the current GitHub main branch, preserving the same paths.
+This patch assumes Build Windows #5 baseline is already present on main, including:
+- scripts/configure_deploy_spec.py dependency/data inclusion
+- scripts/build.ps1 fail-fast build validation
+- scripts/test.ps1 fail-fast native-command handling
+- .github/workflows/ci.yaml Linux libegl1 fix
+- .github/workflows/build-windows.yaml path fix
+
+After applying this patch:
+1. Wait for CI to pass.
+2. Run Actions > Build Windows manually on main.
+3. Download TelegramOpsStudio-windows-standalone artifact.
+4. Keep the whole standalone directory together; do not copy only the EXE.

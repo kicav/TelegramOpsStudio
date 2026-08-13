@@ -52,14 +52,14 @@ Run `Build Windows` manually or from a matching pull request. It:
 Push a version tag only after CI and Windows build are green:
 
 ```text
-v0.2.0
+v0.3.0
 ```
 
 `Release Windows` creates:
 
 ```text
-TelegramOpsStudio-Portable-v0.2.0.zip
-TelegramOpsStudioSetup-0.2.0.exe
+TelegramOpsStudio-Portable-v0.3.0.zip
+TelegramOpsStudioSetup-0.3.0.exe
 SHA256SUMS.txt
 ```
 

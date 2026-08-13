@@ -134,3 +134,16 @@ If there is an unfinished attempt row, recovery closes it with a structured reco
 ## 10. Secrets
 
 DB rows store references such as `api_hash_secret_ref`, not API hashes or OTP/2FA values. `KeyringSecretStore` uses the OS credential backend. Session files remain outside the DB and are excluded from Git.
+
+
+## 11. Functional desktop UI (v0.3)
+
+The primary pages communicate with `CoreRuntime` only through immutable command/event objects.
+
+- **Accounts**: API profile, OS-keyring secret reference, OTP/2FA login, session status.
+- **Workflow**: READY account selection, source scan, member table, filters, target validation/snapshot, candidate preview and export.
+- **Jobs**: persistent review queues; no production bulk membership executor is connected.
+- **Logs**: audit rows from SQLite.
+- **Settings**: runtime directories and diagnostics.
+
+The UI never writes SQLite and never creates Telethon clients directly.

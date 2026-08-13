@@ -34,3 +34,8 @@ class ApiProfileRepository:
         return self.connection.execute(
             "SELECT * FROM api_profiles WHERE id = ?", (profile_id,)
         ).fetchone()
+
+    def get_by_name(self, name: str) -> sqlite3.Row | None:
+        return self.connection.execute(
+            "SELECT * FROM api_profiles WHERE name = ?", (name,)
+        ).fetchone()

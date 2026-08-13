@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0.dev0
+
+- Replaced placeholder Accounts/Workflow/Jobs/Logs/Settings pages with functional PySide6 pages.
+- Added command/event contracts for account authentication, source scan, target preview, export and review jobs.
+- Added OS-keyring-backed API Hash storage and interactive OTP/2FA login flow.
+- Connected accessible Telethon member scans to SQLite with live progress events.
+- Added candidate table, filters, target snapshot subtraction and full-set CSV/XLSX export.
+- Added persistent review jobs and audit-log browsing in the UI.
+- Moved self-check into Settings/Diagnostics and removed developer toolbar controls from the main workflow.
+- Preserved read/validation-first production Telegram boundary; no live bulk membership executor is enabled.
+- Expanded regression suite to 22 tests, including account/profile joins and >900-member chunked export.
+
 ## 0.2.0.dev0
 
 - Standardized application branding as TelegramOpsStudio.
