@@ -22,7 +22,7 @@ EXPECTED_TABLES = {
 
 def test_initial_migration_creates_expected_tables(tmp_path: Path) -> None:
     with Database(tmp_path / "app.db") as database:
-        assert database.migrate() == [1]
+        assert database.migrate() == [1, 2]
         connection = database.open()
         tables = {
             row[0]

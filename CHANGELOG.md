@@ -1,6 +1,15 @@
 # Changelog
 
-## 0.3.0.dev0
+## 0.4.0.dev0 - Phase 1 functional expansion
+- Added saved-session health checks from Accounts.
+- Added Groups & Scan History page backed by persisted source records.
+- Added Members & Consent catalog with search and consent filtering.
+- Added bulk local consent metadata updates: UNKNOWN / OPTED_IN / OPTED_OUT.
+- Added migration 0002 for consent state, notes, and index.
+- Source scan completion now refreshes group history and member catalog.
+- Kept production Telegram access read/validation-first; no bulk membership executor enabled.
+
+## 0.4.0.dev0
 
 - Replaced placeholder Accounts/Workflow/Jobs/Logs/Settings pages with functional PySide6 pages.
 - Added command/event contracts for account authentication, source scan, target preview, export and review jobs.

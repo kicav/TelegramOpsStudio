@@ -13,6 +13,7 @@ from PySide6.QtCore import QThread, Signal
 from telegram_workflow.accounts.manager import AccountManager
 from telegram_workflow.diagnostics.paths import ensure_runtime_dirs
 from telegram_workflow.domain.commands import (
+    CheckAccountSessionCommand,
     Command,
     CreateReviewJobCommand,
     ExportMembersCommand,
@@ -20,24 +21,31 @@ from telegram_workflow.domain.commands import (
     PreviewWorkflowCommand,
     RefreshAccountsCommand,
     RefreshDashboardCommand,
+    RefreshGroupsCommand,
     RefreshJobsCommand,
     RefreshLogsCommand,
+    RefreshMembersCommand,
     RequestLoginCodeCommand,
     ScanSourceCommand,
     ShutdownCommand,
     SubmitLoginCodeCommand,
     SubmitLoginPasswordCommand,
+    UpdateMemberConsentCommand,
 )
 from telegram_workflow.domain.enums import AccountState, JobState, SnapshotState
 from telegram_workflow.domain.events import (
+    AccountSessionCheckedEvent,
     AccountsUpdatedEvent,
     AuthCodeRequestedEvent,
     AuthPasswordRequiredEvent,
     AuthSucceededEvent,
     DashboardUpdatedEvent,
     ExportCompletedEvent,
+    GroupsUpdatedEvent,
     JobsUpdatedEvent,
     LogsUpdatedEvent,
+    MemberConsentUpdatedEvent,
+    MembersUpdatedEvent,
     PongEvent,
     ReviewJobCreatedEvent,
     RuntimeReadyEvent,
@@ -163,6 +171,8 @@ class CoreRuntime(QThread):
             await self._submit_login_code(command)
         elif isinstance(command, SubmitLoginPasswordCommand):
             await self._submit_login_password(command)
+        elif isinstance(command, CheckAccountSessionCommand):
+            await self._check_account_session(command)
         elif isinstance(command, ScanSourceCommand):
             await self._scan_source(command)
         elif isinstance(command, PreviewWorkflowCommand):
@@ -175,6 +185,12 @@ class CoreRuntime(QThread):
             self._emit_jobs()
         elif isinstance(command, RefreshLogsCommand):
             self._emit_logs(command.limit)
+        elif isinstance(command, RefreshGroupsCommand):
+            self._emit_groups(command.limit)
+        elif isinstance(command, RefreshMembersCommand):
+            self._emit_members(command)
+        elif isinstance(command, UpdateMemberConsentCommand):
+            self._update_member_consent(command)
 
     def _audit(self, event_type: str, **details: object) -> None:
         AuditRepository(self._connection).append(
@@ -316,7 +332,79 @@ class CoreRuntime(QThread):
             "is_deleted": bool(row["is_deleted"]),
             "last_seen": row["last_seen"] or "",
             "activity_quality": row["activity_quality"] or "UNKNOWN",
+            "consent_state": row["consent_state"] if "consent_state" in row.keys() else "UNKNOWN",
+            "notes": row["notes"] if "notes" in row.keys() else "",
         }
+
+    def _emit_groups(self, limit: int = 1000) -> None:
+        rows = SourceRepository(self._connection).list_all(limit)
+        payload = tuple(
+            {
+                "id": int(row["id"]),
+                "identifier": row["input_identifier"],
+                "entity_id": row["telegram_entity_id"] or "",
+                "title": row["title"] or "",
+                "username": row["username"] or "",
+                "entity_type": row["entity_type"] or "",
+                "scan_state": row["scan_state"],
+                "members": int(row["scanned_member_count"] or 0),
+                "started": row["last_scan_started"] or "",
+                "finished": row["last_scan_finished"] or "",
+                "error": row["scan_error"] or "",
+            }
+            for row in rows
+        )
+        self.event_emitted.emit(GroupsUpdatedEvent(groups=payload))
+
+    def _emit_members(self, command: RefreshMembersCommand) -> None:
+        rows, total = MemberRepository(self._connection).list_rows(
+            search=command.search,
+            consent_state=command.consent_state,
+            source_id=command.source_id,
+            limit=command.limit,
+        )
+        payload = tuple(self._row_to_member(row) for row in rows)
+        self.event_emitted.emit(
+            MembersUpdatedEvent(
+                members=payload, total=total, truncated=total > len(payload)
+            )
+        )
+
+    def _update_member_consent(self, command: UpdateMemberConsentCommand) -> None:
+        updated = MemberRepository(self._connection).set_consent(
+            list(command.member_ids), command.consent_state, notes=command.notes
+        )
+        self._audit(
+            "MEMBER_CONSENT_UPDATED",
+            member_ids=list(command.member_ids),
+            consent_state=command.consent_state,
+            updated=updated,
+        )
+        self.event_emitted.emit(
+            MemberConsentUpdatedEvent(
+                updated=updated, consent_state=command.consent_state.strip().upper()
+            )
+        )
+        self._emit_dashboard()
+
+    async def _check_account_session(self, command: CheckAccountSessionCommand) -> None:
+        adapter = self._account_adapter(command.account_id)
+        try:
+            healthy = await adapter.health_check()
+            AccountRepository(self._connection).set_state(
+                command.account_id,
+                AccountState.READY if healthy else AccountState.AUTH_REQUIRED,
+            )
+            self._audit(
+                "ACCOUNT_SESSION_CHECKED", account_id=command.account_id, healthy=healthy
+            )
+            self.event_emitted.emit(
+                AccountSessionCheckedEvent(account_id=command.account_id, healthy=healthy)
+            )
+            self._emit_accounts()
+            self._emit_dashboard()
+        finally:
+            await adapter.close()
 
     async def _scan_source(self, command: ScanSourceCommand) -> None:
         identifier = command.identifier.strip()
@@ -354,6 +442,8 @@ class CoreRuntime(QThread):
                 )
             )
             self._emit_dashboard()
+            self._emit_groups()
+            self._emit_members(RefreshMembersCommand(source_id=source_id))
         finally:
             await adapter.close()
 

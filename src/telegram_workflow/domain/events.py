@@ -54,6 +54,12 @@ class AuthSucceededEvent(Event):
 
 
 @dataclass(frozen=True, slots=True)
+class AccountSessionCheckedEvent(Event):
+    account_id: int = 0
+    healthy: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class SourceScanProgressEvent(Event):
     source_id: int = 0
     persisted: int = 0
@@ -87,6 +93,24 @@ class WorkflowPreviewEvent(Event):
 class ReviewJobCreatedEvent(Event):
     job_id: int = 0
     selected: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class MembersUpdatedEvent(Event):
+    members: tuple[dict[str, object], ...] = ()
+    total: int = 0
+    truncated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class MemberConsentUpdatedEvent(Event):
+    updated: int = 0
+    consent_state: str = "UNKNOWN"
+
+
+@dataclass(frozen=True, slots=True)
+class GroupsUpdatedEvent(Event):
+    groups: tuple[dict[str, object], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

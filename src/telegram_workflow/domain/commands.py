@@ -49,6 +49,11 @@ class SubmitLoginPasswordCommand(Command):
 
 
 @dataclass(frozen=True, slots=True)
+class CheckAccountSessionCommand(Command):
+    account_id: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ScanSourceCommand(Command):
     account_id: int = 0
     identifier: str = ""
@@ -79,6 +84,26 @@ class ExportMembersCommand(Command):
     member_ids: tuple[int, ...] = ()
     path: str = ""
     file_format: str = "csv"
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshMembersCommand(Command):
+    search: str = ""
+    consent_state: str = "ALL"
+    source_id: int | None = None
+    limit: int = 5000
+
+
+@dataclass(frozen=True, slots=True)
+class UpdateMemberConsentCommand(Command):
+    member_ids: tuple[int, ...] = ()
+    consent_state: str = "UNKNOWN"
+    notes: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshGroupsCommand(Command):
+    limit: int = 1000
 
 
 @dataclass(frozen=True, slots=True)

@@ -99,3 +99,17 @@ class SourceRepository:
             "SELECT COUNT(*) FROM source_members WHERE source_id = ?", (source_id,)
         ).fetchone()
         return int(row[0]) if row else 0
+
+    def list_all(self, limit: int = 1000) -> list[sqlite3.Row]:
+        return self.connection.execute(
+            """
+            SELECT id, input_identifier, telegram_entity_id, title, username, entity_type,
+                   scan_state, scanned_member_count, last_scan_started, last_scan_finished,
+                   scan_error, created_at
+            FROM sources
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 10_000)),),
+        ).fetchall()
+

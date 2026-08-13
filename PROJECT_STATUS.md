@@ -1,6 +1,6 @@
 # Project Status
 
-## 0.3.0.dev0 functional milestone
+## 0.4.0.dev0 functional milestone
 
 Implemented in this source package:
 
@@ -21,10 +21,15 @@ Validation in the current environment:
 - Python compilation: PASS
 - pytest: 22/22 PASS
 - fake end-to-end workflow: PASS
-- direct source version: `0.3.0.dev0`
+- direct source version: `0.4.0.dev0`
 
-The previous `0.2.0.dev0` baseline has already produced a successful Windows GitHub Actions standalone build. The `0.3.0.dev0` UI/runtime changes must be uploaded and rebuilt on the Windows runner before release.
+The previous `0.2.0.dev0` baseline has already produced a successful Windows GitHub Actions standalone build. The `0.4.0.dev0` UI/runtime changes must be uploaded and rebuilt on the Windows runner before release.
 
 ## Safety boundary
 
 Live Telethon access is authentication/read/validation-first. Review jobs persist the candidate set but no production bulk membership executor is connected. The project contains no hidden-member bypass, FloodWait evasion, restriction avoidance, or account/proxy rotation logic.
+
+
+## v0.4 Phase 1
+Implemented: account session re-check, groups/scan history, searchable member catalog, local consent metadata and migration coverage.
+Next: proxy configuration, managed group overview, resumable scan campaigns/checkpoints, then controlled review queues.

@@ -63,3 +63,64 @@ class MemberRepository:
     def count(self) -> int:
         row = self.connection.execute("SELECT COUNT(*) FROM members").fetchone()
         return int(row[0]) if row else 0
+
+    def list_rows(
+        self,
+        *,
+        search: str = "",
+        consent_state: str = "ALL",
+        source_id: int | None = None,
+        limit: int = 5000,
+    ) -> tuple[list[sqlite3.Row], int]:
+        clauses: list[str] = []
+        params: list[object] = []
+        joins = ""
+        if source_id is not None:
+            joins = " JOIN source_members sm ON sm.member_id = m.id "
+            clauses.append("sm.source_id = ?")
+            params.append(source_id)
+        normalized_consent = consent_state.strip().upper()
+        if normalized_consent in {"UNKNOWN", "OPTED_IN", "OPTED_OUT"}:
+            clauses.append("m.consent_state = ?")
+            params.append(normalized_consent)
+        search = search.strip()
+        if search:
+            token = f"%{search}%"
+            clauses.append(
+                "(CAST(m.telegram_user_id AS TEXT) LIKE ? OR m.username LIKE ? "
+                "OR m.first_name LIKE ? OR m.last_name LIKE ? OR m.phone LIKE ?)"
+            )
+            params.extend([token] * 5)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        count_row = self.connection.execute(
+            f"SELECT COUNT(*) FROM members m{joins}{where}", params
+        ).fetchone()
+        total = int(count_row[0]) if count_row else 0
+        rows = self.connection.execute(
+            f"SELECT DISTINCT m.* FROM members m{joins}{where} ORDER BY m.id DESC LIMIT ?",
+            [*params, max(1, min(int(limit), 50_000))],
+        ).fetchall()
+        return rows, total
+
+    def set_consent(
+        self, member_ids: list[int], consent_state: str, *, notes: str = ""
+    ) -> int:
+        normalized = consent_state.strip().upper()
+        if normalized not in {"UNKNOWN", "OPTED_IN", "OPTED_OUT"}:
+            raise ValueError("Invalid consent state")
+        unique_ids = sorted({int(value) for value in member_ids if int(value) > 0})
+        if not unique_ids:
+            return 0
+        placeholders = ",".join("?" for _ in unique_ids)
+        cursor = self.connection.execute(
+            f"""
+            UPDATE members
+            SET consent_state = ?, consent_updated_at = datetime('now'), notes = ?,
+                updated_at = datetime('now')
+            WHERE id IN ({placeholders})
+            """,
+            [normalized, notes.strip(), *unique_ids],
+        )
+        self.connection.commit()
+        return int(cursor.rowcount)
+

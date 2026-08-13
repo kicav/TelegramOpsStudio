@@ -29,27 +29,35 @@ from PySide6.QtWidgets import (
 from telegram_workflow.diagnostics.paths import runtime_paths
 from telegram_workflow.diagnostics.self_check import format_self_check_json, run_self_check
 from telegram_workflow.domain.commands import (
+    CheckAccountSessionCommand,
     CreateReviewJobCommand,
     ExportMembersCommand,
     PreviewWorkflowCommand,
     RefreshAccountsCommand,
     RefreshDashboardCommand,
+    RefreshGroupsCommand,
     RefreshJobsCommand,
     RefreshLogsCommand,
+    RefreshMembersCommand,
     RequestLoginCodeCommand,
     ScanSourceCommand,
     SubmitLoginCodeCommand,
     SubmitLoginPasswordCommand,
+    UpdateMemberConsentCommand,
 )
 from telegram_workflow.domain.events import (
+    AccountSessionCheckedEvent,
     AccountsUpdatedEvent,
     AuthCodeRequestedEvent,
     AuthPasswordRequiredEvent,
     AuthSucceededEvent,
     DashboardUpdatedEvent,
     ExportCompletedEvent,
+    GroupsUpdatedEvent,
     JobsUpdatedEvent,
     LogsUpdatedEvent,
+    MemberConsentUpdatedEvent,
+    MembersUpdatedEvent,
     ReviewJobCreatedEvent,
     RuntimeReadyEvent,
     RuntimeStoppedEvent,
@@ -79,6 +87,7 @@ def _table(headers: list[str]) -> QTableWidget:
     table = QTableWidget(0, len(headers))
     table.setHorizontalHeaderLabels(headers)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.verticalHeader().setVisible(False)
     table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
@@ -153,8 +162,10 @@ class AccountsPage(QWidget):
         auth_buttons = QHBoxLayout()
         self.request_code = QPushButton("Send login code")
         self.refresh = QPushButton("Refresh accounts")
+        self.check_session = QPushButton("Check selected session")
         auth_buttons.addWidget(self.request_code)
         auth_buttons.addWidget(self.refresh)
+        auth_buttons.addWidget(self.check_session)
         auth_buttons.addStretch(1)
         layout.addLayout(auth_buttons)
 
@@ -188,6 +199,18 @@ class AccountsPage(QWidget):
         self.submit_code.clicked.connect(self._submit_code)
         self.submit_password.clicked.connect(self._submit_password)
         self.refresh.clicked.connect(lambda: self.runtime.submit(RefreshAccountsCommand()))
+        self.check_session.clicked.connect(self._check_session)
+
+    def _check_session(self) -> None:
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            QMessageBox.warning(self, "No account selected", "Select an account row first.")
+            return
+        item = self.table.item(rows[0].row(), 0)
+        if item is None:
+            return
+        self.status.setText("Checking saved Telegram session…")
+        self.runtime.submit(CheckAccountSessionCommand(account_id=int(item.text())))
 
     def _request_code(self) -> None:
         try:
@@ -251,7 +274,7 @@ class AccountsPage(QWidget):
 class WorkflowPage(QWidget):
     MEMBER_HEADERS = [
         "DB ID", "User ID", "Username", "First name", "Last name", "Phone",
-        "Bot", "Deleted", "Last seen", "Activity",
+        "Bot", "Deleted", "Last seen", "Activity", "Consent",
     ]
 
     def __init__(self, runtime: CoreRuntime) -> None:
@@ -475,11 +498,162 @@ class WorkflowPage(QWidget):
             [
                 m["id"], m["user_id"], m["username"], m["first_name"], m["last_name"],
                 m["phone"], m["is_bot"], m["is_deleted"], m["last_seen"],
-                m["activity_quality"],
+                m["activity_quality"], m.get("consent_state", "UNKNOWN"),
             ]
             for m in members
         ]
         _set_table_rows(self.table, rows)
+
+
+class GroupsPage(QWidget):
+    def __init__(self, runtime: CoreRuntime) -> None:
+        super().__init__()
+        self.runtime = runtime
+        layout = QVBoxLayout(self)
+        top = QHBoxLayout()
+        top.addWidget(_heading("Groups & Scan History"))
+        self.refresh = QPushButton("Refresh")
+        top.addStretch(1)
+        top.addWidget(self.refresh)
+        layout.addLayout(top)
+        hint = QLabel(
+            "Shows Telegram entities already resolved/scanned by this installation. "
+            "Only participant lists exposed to the authenticated account are stored."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #555;")
+        layout.addWidget(hint)
+        self.table = _table(
+            [
+                "ID", "Title", "Username", "Type", "State", "Members", "Last scan",
+                "Identifier", "Error",
+            ]
+        )
+        layout.addWidget(self.table, 1)
+        self.refresh.clicked.connect(lambda: self.runtime.submit(RefreshGroupsCommand()))
+
+    def set_groups(self, groups: tuple[dict[str, object], ...]) -> None:
+        _set_table_rows(
+            self.table,
+            [
+                [
+                    g["id"], g["title"], g["username"], g["entity_type"],
+                    g["scan_state"], g["members"], g["finished"] or g["started"],
+                    g["identifier"], g["error"],
+                ]
+                for g in groups
+            ],
+        )
+
+
+class MembersPage(QWidget):
+    HEADERS = [
+        "DB ID", "User ID", "Username", "First name", "Last name", "Phone",
+        "Bot", "Deleted", "Last seen", "Activity", "Consent", "Notes",
+    ]
+
+    def __init__(self, runtime: CoreRuntime) -> None:
+        super().__init__()
+        self.runtime = runtime
+        self._total = 0
+        layout = QVBoxLayout(self)
+        layout.addWidget(_heading("Members & Consent"))
+        hint = QLabel(
+            "Local member catalog collected from accessible participant lists. Consent is "
+            "explicit local metadata used to gate future direct outreach workflows."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #555;")
+        layout.addWidget(hint)
+
+        search_row = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Search user ID, username, name or phone…")
+        self.consent_filter = QComboBox()
+        self.consent_filter.addItems(["ALL", "UNKNOWN", "OPTED_IN", "OPTED_OUT"])
+        self.refresh = QPushButton("Refresh")
+        search_row.addWidget(self.search, 1)
+        search_row.addWidget(QLabel("Consent"))
+        search_row.addWidget(self.consent_filter)
+        search_row.addWidget(self.refresh)
+        layout.addLayout(search_row)
+
+        action_row = QHBoxLayout()
+        self.set_opted_in = QPushButton("Mark opted in")
+        self.set_opted_out = QPushButton("Mark opted out")
+        self.set_unknown = QPushButton("Reset unknown")
+        self.notes = QLineEdit()
+        self.notes.setPlaceholderText("Optional consent note / provenance")
+        action_row.addWidget(self.set_opted_in)
+        action_row.addWidget(self.set_opted_out)
+        action_row.addWidget(self.set_unknown)
+        action_row.addWidget(self.notes, 1)
+        layout.addLayout(action_row)
+
+        self.status = QLabel("No member catalog loaded.")
+        layout.addWidget(self.status)
+        self.table = _table(self.HEADERS)
+        layout.addWidget(self.table, 1)
+
+        self.refresh.clicked.connect(self._refresh)
+        self.search.returnPressed.connect(self._refresh)
+        self.consent_filter.currentTextChanged.connect(lambda _value: self._refresh())
+        self.set_opted_in.clicked.connect(lambda: self._set_consent("OPTED_IN"))
+        self.set_opted_out.clicked.connect(lambda: self._set_consent("OPTED_OUT"))
+        self.set_unknown.clicked.connect(lambda: self._set_consent("UNKNOWN"))
+
+    def _refresh(self) -> None:
+        self.runtime.submit(
+            RefreshMembersCommand(
+                search=self.search.text().strip(),
+                consent_state=self.consent_filter.currentText(),
+                limit=5000,
+            )
+        )
+
+    def _selected_member_ids(self) -> tuple[int, ...]:
+        rows = sorted({index.row() for index in self.table.selectionModel().selectedRows()})
+        values: list[int] = []
+        for row in rows:
+            item = self.table.item(row, 0)
+            if item is not None:
+                values.append(int(item.text()))
+        return tuple(values)
+
+    def _set_consent(self, state: str) -> None:
+        member_ids = self._selected_member_ids()
+        if not member_ids:
+            QMessageBox.warning(
+                self, "No members selected", "Select one or more member rows first."
+            )
+            return
+        self.runtime.submit(
+            UpdateMemberConsentCommand(
+                member_ids=member_ids,
+                consent_state=state,
+                notes=self.notes.text().strip(),
+            )
+        )
+
+    def set_members(self, event: MembersUpdatedEvent) -> None:
+        self._total = event.total
+        suffix = " (showing first 5,000)" if event.truncated else ""
+        self.status.setText(f"Catalog: {event.total:,} matching members{suffix}.")
+        _set_table_rows(
+            self.table,
+            [
+                [
+                    m["id"], m["user_id"], m["username"], m["first_name"],
+                    m["last_name"], m["phone"], m["is_bot"], m["is_deleted"],
+                    m["last_seen"], m["activity_quality"], m["consent_state"], m["notes"],
+                ]
+                for m in event.members
+            ],
+        )
+
+    def consent_updated(self, event: MemberConsentUpdatedEvent) -> None:
+        self.status.setText(f"Updated {event.updated} member(s) to {event.consent_state}.")
+        self._refresh()
 
 
 class JobsPage(QWidget):
@@ -566,7 +740,9 @@ class SettingsPage(QWidget):
 
 
 class MainWindow(QMainWindow):
-    NAV_ITEMS = ["Dashboard", "Accounts", "Workflow", "Jobs", "Logs", "Settings"]
+    NAV_ITEMS = [
+        "Dashboard", "Accounts", "Groups", "Workflow", "Members", "Jobs", "Logs", "Settings"
+    ]
 
     def __init__(self, runtime: CoreRuntime) -> None:
         super().__init__()
@@ -600,13 +776,15 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.dashboard_page = DashboardPage()
         self.accounts_page = AccountsPage(runtime)
+        self.groups_page = GroupsPage(runtime)
         self.workflow_page = WorkflowPage(runtime)
+        self.members_page = MembersPage(runtime)
         self.jobs_page = JobsPage(runtime)
         self.logs_page = LogsPage(runtime)
         self.settings_page = SettingsPage()
         for page in (
-            self.dashboard_page, self.accounts_page, self.workflow_page,
-            self.jobs_page, self.logs_page, self.settings_page,
+            self.dashboard_page, self.accounts_page, self.groups_page, self.workflow_page,
+            self.members_page, self.jobs_page, self.logs_page, self.settings_page,
         ):
             self.pages.addWidget(page)
         outer.addWidget(self.pages, 1)
@@ -700,9 +878,13 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentIndex(row)
         if row == 1:
             self.runtime.submit(RefreshAccountsCommand())
-        elif row == 3:
-            self.runtime.submit(RefreshJobsCommand())
+        elif row == 2:
+            self.runtime.submit(RefreshGroupsCommand())
         elif row == 4:
+            self.runtime.submit(RefreshMembersCommand())
+        elif row == 5:
+            self.runtime.submit(RefreshJobsCommand())
+        elif row == 6:
             self.runtime.submit(RefreshLogsCommand())
         elif row == 0:
             self.runtime.submit(RefreshDashboardCommand())
@@ -715,6 +897,11 @@ class MainWindow(QMainWindow):
             self.runtime_status.setText("Core: STOPPED")
         elif isinstance(event, DashboardUpdatedEvent):
             self.dashboard_page.update_counts(event)
+        elif isinstance(event, AccountSessionCheckedEvent):
+            state = "healthy" if event.healthy else "authorization required"
+            self.accounts_page.status.setText(
+                f"Account #{event.account_id} session: {state}."
+            )
         elif isinstance(event, AccountsUpdatedEvent):
             self.accounts_page.set_accounts(event.accounts)
             self.workflow_page.set_accounts(event.accounts)
@@ -740,6 +927,15 @@ class MainWindow(QMainWindow):
                 self,
                 "Review job created",
                 f"Job #{event.job_id} contains {event.selected} candidates.",
+            )
+        elif isinstance(event, GroupsUpdatedEvent):
+            self.groups_page.set_groups(event.groups)
+        elif isinstance(event, MembersUpdatedEvent):
+            self.members_page.set_members(event)
+        elif isinstance(event, MemberConsentUpdatedEvent):
+            self.members_page.consent_updated(event)
+            self.statusBar().showMessage(
+                f"Updated {event.updated} consent record(s) to {event.consent_state}"
             )
         elif isinstance(event, JobsUpdatedEvent):
             self.jobs_page.set_jobs(event.jobs)

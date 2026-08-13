@@ -4,7 +4,7 @@ Local-first Windows desktop application for permission-aware Telegram account/se
 
 ## Current release line
 
-`0.3.0.dev0` is the first functional desktop milestone. The UI is no longer a placeholder shell: Accounts, Workflow, Jobs, Logs and Settings are connected to `CoreRuntime` through commands/events.
+`0.4.0.dev0` is the first functional desktop milestone. The UI is no longer a placeholder shell: Accounts, Workflow, Jobs, Logs and Settings are connected to `CoreRuntime` through commands/events.
 
 The production Telethon boundary remains intentionally **read/validation-first**. It can authenticate sessions, resolve entities, enumerate participant lists Telegram exposes to the authenticated account, inspect target permissions and capture accessible target snapshots. Live bulk membership execution is not enabled. There is no participant-list bypass, message-sender fallback, FloodWait evasion, proxy/account rotation, or hidden-member circumvention.
 
