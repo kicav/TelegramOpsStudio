@@ -26,7 +26,7 @@ def configure(path: Path) -> None:
     parser.set(
         "nuitka",
         "extra_args",
-        "--quiet --noinclude-qt-translations=True --assume-yes-for-downloads",
+        "--quiet --noinclude-qt-translations --assume-yes-for-downloads",
     )
 
     with path.open("w", encoding="utf-8") as handle:
