@@ -38,7 +38,7 @@ class Database:
             self.connection.close()
             self.connection = None
 
-    def __enter__(self) -> "Database":
+    def __enter__(self) -> Database:
         self.open()
         return self
 
