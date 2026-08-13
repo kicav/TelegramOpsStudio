@@ -46,7 +46,7 @@ class TelethonReadOnlyAdapter(TelegramAdapter):
 
             entity_id = int(utils.get_peer_id(raw))
         except Exception:
-            entity_id = int(getattr(raw, "id"))
+            entity_id = int(raw.id)
         title = str(
             getattr(raw, "title", None)
             or " ".join(
