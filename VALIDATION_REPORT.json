@@ -1,0 +1,16 @@
+{
+  "tests": "20/20 PASS",
+  "compile": "PASS",
+  "workflow_yaml": "PASS",
+  "demo_workflow": "PASS",
+  "schema_tables": 14,
+  "quick_check": "ok",
+  "foreign_key_violations": 0,
+  "scale_members": 100000,
+  "member_upsert_seconds": 0.703,
+  "queue_rows": 100000,
+  "queue_enqueue_seconds": 0.639,
+  "first_claim_ms": 22.117,
+  "claimed_job_member_id": 1,
+  "direct_source_entrypoint": "PASS"
+}

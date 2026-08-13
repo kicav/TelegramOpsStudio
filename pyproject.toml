@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-ops-studio"
+version = "0.2.0.dev0"
+description = "Local-first Telegram workflow desktop application with persistent jobs and recovery"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = {text = "Proprietary"}
+authors = [{name = "kicav"}]
+dependencies = [
+  "PySide6>=6.8,<7",
+  "Telethon>=1.44,<2",
+  "keyring>=25,<26",
+  "openpyxl>=3.1,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<10",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+telegram-ops-studio = "telegram_workflow.bootstrap:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+telegram_workflow = ["storage/migrations/*.sql", "ui/resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
