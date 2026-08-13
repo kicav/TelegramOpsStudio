@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $env:PYTHONPATH = "src"
 python -m compileall -q src tests app.py
 ruff check src tests app.py
