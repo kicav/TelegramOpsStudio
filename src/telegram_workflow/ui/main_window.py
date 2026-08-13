@@ -56,13 +56,10 @@ class DashboardPage(QWidget):
 
     def update_counts(self, event: DashboardUpdatedEvent) -> None:
         self.summary.setText(
-            "Ready accounts: {accounts}\nRunning jobs: {running}\nPaused jobs: {paused}\n"
-            "Known members: {members}".format(
-                accounts=event.accounts_ready,
-                running=event.jobs_running,
-                paused=event.jobs_paused,
-                members=event.members_total,
-            )
+            f"Ready accounts: {event.accounts_ready}\n"
+            f"Running jobs: {event.jobs_running}\n"
+            f"Paused jobs: {event.jobs_paused}\n"
+            f"Known members: {event.members_total}"
         )
 
 
