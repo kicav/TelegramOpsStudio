@@ -26,7 +26,17 @@ def configure(path: Path) -> None:
     parser.set(
         "nuitka",
         "extra_args",
-        "--quiet --noinclude-qt-translations --assume-yes-for-downloads --output-filename=TelegramOpsStudio.exe"
+        (
+    "--quiet "
+    "--noinclude-qt-translations "
+    "--assume-yes-for-downloads "
+    "--output-filename=TelegramOpsStudio.exe "
+    "--include-package=telethon "
+    "--include-package=openpyxl "
+    "--include-package=keyring "
+    "--include-data-files=src/telegram_workflow/storage/migrations/*.sql="
+    "telegram_workflow/storage/migrations/"
+)
     )
 
     with path.open("w", encoding="utf-8") as handle:
