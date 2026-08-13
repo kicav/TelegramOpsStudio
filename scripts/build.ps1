@@ -1,4 +1,5 @@
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $env:PYTHONPATH = "src"
 
 function Enable-MsvcEnvironment {
