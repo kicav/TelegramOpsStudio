@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-
 _MEMBER_HEADERS = [
     "User ID", "Username", "First Name", "Last Name", "Phone", "Bot", "Deleted",
     "Last Seen", "Activity Quality",
