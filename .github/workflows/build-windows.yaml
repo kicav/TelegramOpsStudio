@@ -10,7 +10,7 @@ on:
       - 'pyproject.toml'
       - 'scripts/**'
       - 'packaging/**'
-      - '.github/workflows/build-windows.yml'
+      - '.github/workflows/build-windows.yaml'
 
 permissions:
   contents: read
